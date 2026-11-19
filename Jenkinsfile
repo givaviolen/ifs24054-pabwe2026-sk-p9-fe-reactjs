@@ -1,14 +1,6 @@
 pipeline {
     agent any
 
-    tools {
-        nodejs 'node-22'
-    }
-
-    environment {
-        NODE_ENV = 'production'
-    }
-
     stages {
         stage('Install Dependencies') {
             steps {
