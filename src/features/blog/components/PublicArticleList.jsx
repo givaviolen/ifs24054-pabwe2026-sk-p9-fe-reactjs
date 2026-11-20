@@ -54,7 +54,7 @@ export default function PublicArticleList({ navigate }) {
               <h2 className="mt-1 text-lg font-bold">{p.title}</h2>
               <p className="mt-2 flex-1 text-sm text-slate-600 dark:text-slate-300">{p.excerpt}</p>
               <p className="mt-3 text-xs text-slate-500">
-                {p.author?.username} · {formatDate(p.published_at)} · {p.reading_time} menit baca
+                {p.author_name} · {formatDate(p.published_at)} · {p.reading_time} menit baca
               </p>
               <a href={`/posts/${p.slug}`} onClick={(e) => { e.preventDefault(); navigate(`/posts/${p.slug}`) }}
                 className="mt-3 text-sm font-semibold text-indigo-600">Baca selengkapnya →</a>

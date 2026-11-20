@@ -1,8 +1,8 @@
 export default function PostStats({ stats }) {
   const cards = [
-    { label: 'Total Artikel', value: stats?.total ?? 0, color: 'bg-indigo-600' },
-    { label: 'Total Selesai (Terbit)', value: stats?.published ?? 0, color: 'bg-emerald-600' },
-    { label: 'Belum Selesai (Draf)', value: stats?.draft ?? 0, color: 'bg-amber-500' },
+    { label: 'Total Artikel', value: stats?.total_articles ?? 0, color: 'bg-indigo-600' },
+    { label: 'Total Selesai (Terbit)', value: stats?.total_selesai ?? 0, color: 'bg-emerald-600' },
+    { label: 'Belum Selesai (Draf)', value: stats?.belum_selesai ?? 0, color: 'bg-amber-500' },
   ]
   return (
     <div className="grid gap-4 sm:grid-cols-3">

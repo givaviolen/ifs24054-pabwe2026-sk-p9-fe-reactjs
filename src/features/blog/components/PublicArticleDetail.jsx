@@ -21,7 +21,7 @@ export default function PublicArticleDetail({ slug, navigate }) {
       <span className="mt-4 block text-xs font-semibold uppercase text-indigo-600">{post.category}</span>
       <h1 className="mt-1 text-4xl font-extrabold">{post.title}</h1>
       <p className="mt-2 text-sm text-slate-500">
-        Oleh {post.author?.username} · {formatDate(post.published_at)} · {post.reading_time} menit baca
+        Oleh {post.author_name} · {formatDate(post.published_at)} · {post.reading_time} menit baca
       </p>
       {post.cover_image_path && <img src={post.cover_image_path} alt={post.title} className="mt-6 max-h-[28rem] w-full rounded-2xl object-cover" />}
       <div className="mt-6"><MarkdownViewer content={post.content} /></div>
