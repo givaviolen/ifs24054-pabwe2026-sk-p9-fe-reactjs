@@ -1,29 +1,26 @@
-import { apiRequest } from '../../../helpers/apiHelper'
+import { apiData, apiList } from '../../../helpers/apiHelper'
 
-const data = (r) => r.data
-
-// Publik
-export const getCategories = () => apiRequest('/public/categories', { auth: false }).then(data)
-
-export const getPublicPosts = (q = '', category = '') => {
+export const fetchPublicPosts = ({ q = '', category = '' } = {}) => {
   const params = new URLSearchParams()
   if (q) params.set('q', q)
-  if (category && category !== 'Semua') params.set('category', category)
+  if (category) params.set('category', category)
   const qs = params.toString()
-  return apiRequest(`/public/posts${qs ? `?${qs}` : ''}`, { auth: false }).then(data)
+  return apiList(`/api/public/posts${qs ? `?${qs}` : ''}`)
 }
 
-export const getPublicPost = (slug) => apiRequest(`/public/posts/${slug}`, { auth: false }).then(data)
+export const fetchPublicPost = (slug) => apiData(`/api/public/posts/${encodeURIComponent(slug)}`)
 
-// Penulis
-export const getMyPosts = () => apiRequest('/posts').then(data)
-export const getStats = () => apiRequest('/posts/stats').then(data)
-export const createPost = (body) => apiRequest('/posts', { method: 'POST', body }).then(data)
-export const updatePost = (id, body) => apiRequest(`/posts/${id}`, { method: 'PUT', body }).then(data)
-export const togglePublish = (id) => apiRequest(`/posts/${id}/toggle-publish`, { method: 'PATCH' }).then(data)
-export const deletePost = (id) => apiRequest(`/posts/${id}`, { method: 'DELETE' })
-export const aiGenerate = (topic, category, includeWebSearch) =>
-  apiRequest('/posts/ai-generate', {
-    method: 'POST',
-    body: { topic, category, include_web_search: includeWebSearch },
-  }).then(data)
+export const fetchMyPosts = () => apiList('/api/posts', { auth: true })
+
+export const fetchStats = () => apiData('/api/posts/stats', { auth: true })
+
+export const createPost = (payload) => apiData('/api/posts', { method: 'POST', body: payload, auth: true })
+
+export const updatePost = (id, payload) => apiData(`/api/posts/${id}`, { method: 'PUT', body: payload, auth: true })
+
+export const togglePublish = (id) => apiData(`/api/posts/${id}/toggle-publish`, { method: 'PATCH', auth: true })
+
+export const deletePost = (id) => apiData(`/api/posts/${id}`, { method: 'DELETE', auth: true })
+
+export const generateDraft = (payload) =>
+  apiData('/api/posts/ai-generate', { method: 'POST', body: payload, auth: true })

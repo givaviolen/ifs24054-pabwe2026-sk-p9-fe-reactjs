@@ -1,123 +1,208 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { IconDotsVertical, IconPlus, IconSparkles } from '@tabler/icons-react'
+import Link from '../../../components/Link'
+import usePageMeta from '../../../hooks/usePageMeta'
+import { confirmDelete, formatDate, showError, showSuccess } from '../../../helpers/toolsHelper'
+import { deletePost, fetchMyPosts, fetchStats, togglePublish } from '../api/blogApi'
 import PostStats from './PostStats'
-import PostModal from '../modals/PostModal'
-import AiPostGeneratorModal from '../modals/AiPostGeneratorModal'
-import { deletePost, getCategories, getMyPosts, getStats, togglePublish } from '../api/blogApi'
-import { confirmDialog, formatDate, showError, showSuccess } from '../../../helpers/toolsHelper'
 
-export default function AuthorDashboard({ navigate }) {
+const PostModal = lazy(() => import('../modals/PostModal'))
+const AiPostGeneratorModal = lazy(() => import('../modals/AiPostGeneratorModal'))
+
+const menuItemClass =
+  'block w-full px-4 py-2 text-left text-sm text-slate-900 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-700'
+
+export default function AuthorDashboard({ theme, onSessionExpired }) {
+  usePageMeta('Workspace Penulis | Delcom Blog', 'Kelola artikel Anda: tulis, terbitkan, dan buat draf dengan AI generator.')
   const [posts, setPosts] = useState([])
   const [stats, setStats] = useState(null)
-  const [categories, setCategories] = useState([])
-  const [menuId, setMenuId] = useState(null)
-  const [editing, setEditing] = useState(null) // null | {} (baru) | post
-  const [aiOpen, setAiOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [modal, setModal] = useState(null)
+  const [openMenu, setOpenMenu] = useState(null)
 
   const load = useCallback(async () => {
     try {
-      const [p, s] = await Promise.all([getMyPosts(), getStats()])
-      setPosts(p)
-      setStats(s)
-    } catch (e) {
-      showError(e.message)
+      const [list, summary] = await Promise.all([fetchMyPosts(), fetchStats()])
+      setPosts(list)
+      setStats(summary)
+      setError('')
+    } catch (err) {
+      if (err.status === 401) {
+        onSessionExpired()
+        return
+      }
+      setError(err.message)
     }
-  }, [])
+    setLoading(false)
+  }, [onSessionExpired])
 
   useEffect(() => {
     load()
-    getCategories().then(setCategories).catch(() => setCategories([]))
   }, [load])
 
-  const onToggle = async (p) => {
+  const fail = (err) => {
+    if (err.status === 401) {
+      onSessionExpired()
+      return
+    }
+    showError(err.message)
+  }
+
+  const handleToggle = async (post) => {
     try {
-      await togglePublish(p.id)
-      load()
-    } catch (e) {
-      showError(e.message)
+      await togglePublish(post.id)
+      await load()
+    } catch (err) {
+      fail(err)
     }
   }
 
-  const onDelete = async (p) => {
-    setMenuId(null)
-    if (!(await confirmDialog(`Hapus artikel "${p.title}"?`, 'Ya, hapus'))) return
+  const handleDelete = async (post) => {
+    setOpenMenu(null)
+    if (!(await confirmDelete(post.title))) return
     try {
-      await deletePost(p.id)
-      await showSuccess('Artikel dihapus')
-      load()
-    } catch (e) {
-      showError(e.message)
+      await deletePost(post.id)
+      showSuccess('Artikel berhasil dihapus')
+      await load()
+    } catch (err) {
+      fail(err)
     }
   }
 
-  const applyAi = (draft) => {
-    setAiOpen(false)
-    setEditing({ title: draft.title, category: draft.category, excerpt: draft.excerpt, content: draft.content })
+  const handleEdit = (post) => {
+    setOpenMenu(null)
+    setModal({ type: 'post', post })
+  }
+
+  const handleSaved = () => {
+    setModal(null)
+    showSuccess('Artikel berhasil disimpan')
+    load()
   }
 
   return (
-    <main className="w-full space-y-6 px-4 py-8 md:px-10">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-extrabold">Workspace Penulis</h1>
-        <div className="flex gap-2">
-          <button onClick={() => setAiOpen(true)} className="flex items-center gap-1 rounded-lg bg-violet-600 px-4 py-2 font-semibold text-white hover:bg-violet-700">
-            <IconSparkles size={18} /> AI Generator
+    <div className="w-full px-4 py-8 sm:px-8 lg:px-12">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="m-0 text-3xl font-bold text-slate-900 dark:text-white">Workspace Penulis</h1>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setModal({ type: 'ai' })}
+            className="inline-flex items-center gap-2 rounded-lg bg-violet-800 px-4 py-2 font-semibold text-white"
+          >
+            <IconSparkles size={18} aria-hidden="true" /> AI Generator
           </button>
-          <button onClick={() => setEditing({})} className="flex items-center gap-1 rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700">
-            <IconPlus size={18} /> Tambah Artikel
+          <button
+            type="button"
+            onClick={() => setModal({ type: 'post' })}
+            className="inline-flex items-center gap-2 rounded-lg bg-indigo-700 px-4 py-2 font-semibold text-white"
+          >
+            <IconPlus size={18} aria-hidden="true" /> Tambah Artikel
           </button>
         </div>
       </div>
 
       <PostStats stats={stats} />
 
-      <div className="overflow-x-auto rounded-2xl bg-white shadow dark:bg-slate-800">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-100 dark:bg-slate-700">
-            <tr>
-              <th className="p-3">Judul</th><th className="p-3">Kategori</th><th className="p-3">Status</th>
-              <th className="p-3">Dibuat</th><th className="p-3 text-right">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {posts.length === 0 && <tr><td colSpan={5} className="p-6 text-center">Belum ada artikel.</td></tr>}
-            {posts.map((p) => (
-              <tr key={p.id} className="border-t border-slate-200 dark:border-slate-700">
-                <td className="p-3 font-medium">{p.title}</td>
-                <td className="p-3">{p.category}</td>
-                <td className="p-3">
-                  <button role="switch" aria-checked={p.is_published} aria-label={`Toggle publikasi ${p.title}`} onClick={() => onToggle(p)}
-                    className={`relative h-6 w-11 rounded-full transition ${p.is_published ? 'bg-emerald-500' : 'bg-slate-400'}`}>
-                    <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${p.is_published ? 'left-5' : 'left-0.5'}`} />
-                  </button>
-                  <span className="ml-2 text-xs">{p.is_published ? 'Terbit' : 'Draf'}</span>
-                </td>
-                <td className="p-3">{formatDate(p.created_at)}</td>
-                <td className="relative p-3 text-right">
-                  <button aria-label="Menu aksi" onClick={() => setMenuId(menuId === p.id ? null : p.id)} className="rounded p-1 hover:bg-slate-100 dark:hover:bg-slate-700">
-                    <IconDotsVertical size={18} />
-                  </button>
-                  {menuId === p.id && (
-                    <div className="absolute right-3 z-10 mt-1 w-36 rounded-lg border border-slate-200 bg-white text-left shadow-lg dark:border-slate-600 dark:bg-slate-800">
-                      <button className="block w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => { setMenuId(null); setEditing(p) }}>Edit</button>
-                      {p.is_published && (
-                        <button className="block w-full px-3 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => navigate(`/posts/${p.slug}`)}>Lihat</button>
+      <section aria-label="Daftar artikel saya" className="mt-8 min-h-screen">
+        {loading && <p role="status">Memuat artikel…</p>}
+        {!loading && error && (
+          <p role="alert" className="rounded-lg bg-red-100 p-4 text-red-900">
+            {error}
+          </p>
+        )}
+        {!loading && !error && posts.length === 0 && <p>Anda belum menulis artikel.</p>}
+        {!loading && !error && posts.length > 0 && (
+          <div className="overflow-x-auto md:overflow-visible">
+            <table className="w-full border-collapse text-left text-sm">
+              <caption className="sr-only">Daftar artikel milik Anda</caption>
+              <thead>
+                <tr className="border-b border-slate-300 dark:border-slate-600">
+                  <th scope="col" className="p-3">Judul</th>
+                  <th scope="col" className="p-3">Kategori</th>
+                  <th scope="col" className="p-3">Status</th>
+                  <th scope="col" className="p-3">Dibuat</th>
+                  <th scope="col" className="p-3">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {posts.map((post) => (
+                  <tr key={post.id} className="border-b border-slate-200 dark:border-slate-700">
+                    <td className="p-3 font-medium">{post.title}</td>
+                    <td className="p-3">{post.category}</td>
+                    <td className="p-3">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={post.is_published}
+                        aria-label={`${post.is_published ? 'Terbit' : 'Draf'}, ubah status ${post.title}`}
+                        onClick={() => handleToggle(post)}
+                        className={
+                          post.is_published
+                            ? 'rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-900'
+                            : 'rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900'
+                        }
+                      >
+                        {post.is_published ? 'Terbit' : 'Draf'}
+                      </button>
+                    </td>
+                    <td className="p-3">{formatDate(post.created_at)}</td>
+                    <td className="relative p-3">
+                      <button
+                        type="button"
+                        aria-label={`Menu aksi ${post.title}`}
+                        aria-haspopup="menu"
+                        aria-expanded={openMenu === post.id}
+                        onClick={() => setOpenMenu(openMenu === post.id ? null : post.id)}
+                        className="rounded-md p-1 hover:bg-slate-100 dark:hover:bg-slate-700"
+                      >
+                        <IconDotsVertical size={20} aria-hidden="true" />
+                      </button>
+                      {openMenu === post.id && (
+                        <div
+                          role="menu"
+                          className="absolute right-3 z-20 mt-1 w-40 rounded-lg border border-slate-300 bg-white py-1 shadow-lg dark:border-slate-600 dark:bg-slate-800"
+                        >
+                          <button type="button" role="menuitem" className={menuItemClass} onClick={() => handleEdit(post)}>
+                            Edit
+                          </button>
+                          {post.is_published && (
+                            <Link to={`/posts/${post.slug}`} role="menuitem" className={menuItemClass}>
+                              Lihat
+                            </Link>
+                          )}
+                          <button type="button" role="menuitem" className={menuItemClass} onClick={() => handleDelete(post)}>
+                            Hapus
+                          </button>
+                        </div>
                       )}
-                      <button className="block w-full px-3 py-2 text-left text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-700" onClick={() => onDelete(p)}>Hapus</button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
-      {editing && (
-        <PostModal key={editing.id ?? editing.title ?? 'new'} post={editing} categories={categories}
-          onClose={() => setEditing(null)} onSaved={() => { setEditing(null); load() }} />
-      )}
-      {aiOpen && <AiPostGeneratorModal categories={categories} onClose={() => setAiOpen(false)} onApply={applyAi} />}
-    </main>
+      <Suspense fallback={null}>
+        {modal && modal.type === 'post' && (
+          <PostModal
+            post={modal.post}
+            draft={modal.draft}
+            theme={theme}
+            onClose={() => setModal(null)}
+            onSaved={handleSaved}
+          />
+        )}
+        {modal && modal.type === 'ai' && (
+          <AiPostGeneratorModal
+            onClose={() => setModal(null)}
+            onApply={(draft) => setModal({ type: 'post', draft })}
+          />
+        )}
+      </Suspense>
+    </div>
   )
 }

@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
-const KEY = 'delcom_theme'
+const THEME_KEY = 'delcom_blog_theme'
 
-/** Hook tema dark/light; menambah kelas "dark" pada <html>. */
 export default function useTheme() {
-  const [theme, setTheme] = useState(() => localStorage.getItem(KEY) || 'light')
+  const [theme, setTheme] = useState(() => (localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light'))
+
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
-    localStorage.setItem(KEY, theme)
+    localStorage.setItem(THEME_KEY, theme)
   }, [theme])
-  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
+
+  const toggleTheme = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), [])
   return { theme, toggleTheme }
 }

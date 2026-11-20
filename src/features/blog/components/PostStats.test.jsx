@@ -1,17 +1,16 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
 import PostStats from './PostStats'
 
 describe('PostStats', () => {
-  it('menampilkan 3 kartu', () => {
-    render(<PostStats stats={{ total_articles: 5, total_selesai: 3, belum_selesai: 2 }} />)
-    expect(screen.getByText('Total Artikel')).toBeInTheDocument()
-    expect(screen.getByText('5')).toBeInTheDocument()
-    expect(screen.getByText('2')).toBeInTheDocument()
+  it('menampilkan nol saat statistik belum ada', () => {
+    render(<PostStats stats={null} />)
+    expect(screen.getAllByText('0')).toHaveLength(3)
   })
 
-  it('default 0 saat stats kosong', () => {
-    render(<PostStats />)
-    expect(screen.getAllByText('0')).toHaveLength(3)
+  it('menampilkan 3 kartu statistik', () => {
+    render(<PostStats stats={{ total_articles: 9, total_selesai: 6, belum_selesai: 3 }} />)
+    expect(screen.getByText('Total Artikel').nextSibling).toHaveTextContent('9')
+    expect(screen.getByText('Terbit').nextSibling).toHaveTextContent('6')
+    expect(screen.getByText('Draf').nextSibling).toHaveTextContent('3')
   })
 })

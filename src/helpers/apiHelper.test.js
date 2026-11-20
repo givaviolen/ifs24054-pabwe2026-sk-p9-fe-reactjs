@@ -1,41 +1,89 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiRequest, getToken, setToken } from './apiHelper'
+import { afterEach, vi } from 'vitest'
+import { ApiError, apiData, apiList, apiRequest, API_BASE } from './apiHelper'
+import { saveSession } from './sessionHelper'
 
-afterEach(() => { vi.restoreAllMocks(); localStorage.clear() })
-
-const mockFetch = (ok, json, jsonFails = false) =>
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-    ok, status: ok ? 200 : 400,
-    json: jsonFails ? () => Promise.reject(new Error('x')) : () => Promise.resolve(json),
-  })
+const reply = (body, { ok = true, status = 200 } = {}) => ({ ok, status, json: async () => body })
 
 describe('apiHelper', () => {
-  it('menyimpan dan menghapus token', () => {
-    setToken('abc'); expect(getToken()).toBe('abc')
-    setToken(null); expect(getToken()).toBeNull()
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+    vi.resetModules()
   })
 
-  it('menyuntik header Bearer dan mengembalikan JSON', async () => {
-    setToken('abc')
-    const f = mockFetch(true, { status: 'success', data: 1 })
-    const res = await apiRequest('/posts', { method: 'POST', body: { a: 1 } })
-    expect(res.data).toBe(1)
-    expect(f.mock.calls[0][1].headers.Authorization).toBe('Bearer abc')
+  it('API_BASE kosong secara default', () => {
+    expect(API_BASE).toBe('')
   })
 
-  it('tanpa token / auth=false tidak mengirim Authorization', async () => {
-    const f = mockFetch(true, {})
-    await apiRequest('/x', { auth: false })
-    expect(f.mock.calls[0][1].headers.Authorization).toBeUndefined()
+  it('API_BASE dibaca dari env tanpa slash di akhir', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.test///')
+    vi.resetModules()
+    const mod = await import('./apiHelper')
+    expect(mod.API_BASE).toBe('https://api.example.test')
   })
 
-  it('melempar error dengan pesan server', async () => {
-    mockFetch(false, { message: 'Gagal!' })
-    await expect(apiRequest('/x')).rejects.toThrow('Gagal!')
+  it('GET sederhana tanpa body dan tanpa token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(reply({ status: 'success', data: { a: 1 } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const json = await apiRequest('/api/x')
+    expect(json.data).toEqual({ a: 1 })
+    expect(fetchMock).toHaveBeenCalledWith('/api/x', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      body: undefined,
+    })
   })
 
-  it('melempar error generik jika body bukan JSON', async () => {
-    mockFetch(false, null, true)
-    await expect(apiRequest('/x')).rejects.toThrow('Permintaan gagal (400)')
+  it('POST dengan body dan token', async () => {
+    saveSession('tok', { id: 1 })
+    const fetchMock = vi.fn().mockResolvedValue(reply({ status: 'success' }))
+    vi.stubGlobal('fetch', fetchMock)
+    await apiRequest('/api/x', { method: 'POST', body: { a: 1 }, auth: true })
+    expect(fetchMock).toHaveBeenCalledWith('/api/x', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: 'Bearer tok' },
+      body: '{"a":1}',
+    })
+  })
+
+  it('melempar ApiError saat jaringan gagal', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+    const err = await apiRequest('/api/x').catch((e) => e)
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err.message).toBe('Tidak dapat terhubung ke server')
+    expect(err.status).toBe(0)
+  })
+
+  it('melempar ApiError dengan pesan server saat respons tidak ok', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({ status: 'fail', message: 'Ditolak' }, { ok: false, status: 403 })))
+    const err = await apiRequest('/api/x').catch((e) => e)
+    expect(err.message).toBe('Ditolak')
+    expect(err.status).toBe(403)
+    expect(err.name).toBe('ApiError')
+  })
+
+  it('melempar ApiError saat status bukan success walau HTTP ok', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({ status: 'error', message: 'Gagal' })))
+    await expect(apiRequest('/api/x')).rejects.toThrow('Gagal')
+  })
+
+  it('memakai pesan bawaan bila respons bukan JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => { throw new Error('bukan json') } }),
+    )
+    await expect(apiRequest('/api/x')).rejects.toThrow('Terjadi kesalahan pada server')
+  })
+
+  it('apiData mengembalikan data', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({ status: 'success', data: { b: 2 } })))
+    expect(await apiData('/api/x')).toEqual({ b: 2 })
+  })
+
+  it('apiList mengembalikan data atau array kosong', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({ status: 'success', data: [1] })))
+    expect(await apiList('/api/x')).toEqual([1])
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({ status: 'success', data: null })))
+    expect(await apiList('/api/x')).toEqual([])
   })
 })

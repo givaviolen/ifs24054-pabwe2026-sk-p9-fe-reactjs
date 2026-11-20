@@ -3,29 +3,29 @@ import Editor from '@toast-ui/editor'
 import '@toast-ui/editor/dist/toastui-editor.css'
 import '@toast-ui/editor/dist/theme/toastui-editor-dark.css'
 
-export default function MarkdownEditor({ value = '', onChange, height = '60vh' }) {
-  const el = useRef(null)
-  const editor = useRef(null)
-  const cb = useRef(onChange)
-  cb.current = onChange
+export default function MarkdownEditor({ value = '', onChange, theme = 'light' }) {
+  const elRef = useRef(null)
+  const latest = useRef({ value, onChange })
 
   useEffect(() => {
-    const dark = document.documentElement.classList.contains('dark')
-    editor.current = new Editor({
-      el: el.current,
-      height,
-      initialEditType: 'markdown',
-      previewStyle: 'vertical',
-      initialValue: value,
-      theme: dark ? 'dark' : 'light',
-      events: { change: () => cb.current?.(editor.current.getMarkdown()) },
-    })
-    return () => {
-      editor.current?.destroy()
-      editor.current = null
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    latest.current = { value, onChange }
+  })
 
-  return <div ref={el} data-testid="markdown-editor" />
+  useEffect(() => {
+    const editor = new Editor({
+      el: elRef.current,
+      height: '420px',
+      initialEditType: 'markdown',
+      previewStyle: 'tab',
+      initialValue: latest.current.value,
+      theme,
+      usageStatistics: false,
+      events: {
+        change: () => latest.current.onChange(editor.getMarkdown()),
+      },
+    })
+    return () => editor.destroy()
+  }, [theme])
+
+  return <div ref={elRef} data-testid="markdown-editor" />
 }

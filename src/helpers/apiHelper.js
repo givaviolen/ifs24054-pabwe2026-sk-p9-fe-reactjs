@@ -1,35 +1,38 @@
-const TOKEN_KEY = 'delcom_token'
-const BASE = import.meta.env.VITE_API_BASE_URL || ''
+import { getToken } from './sessionHelper'
 
-export const getToken = () => localStorage.getItem(TOKEN_KEY)
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
 
-export const setToken = (token) => {
-  if (token) localStorage.setItem(TOKEN_KEY, token)
-  else localStorage.removeItem(TOKEN_KEY)
+export class ApiError extends Error {
+  constructor(message, status) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
 }
 
-/** Wrapper fetch terpusat: menyuntik Bearer token & mengurai respons {status,message,data}. */
-export async function apiRequest(path, { method = 'GET', body, auth = true } = {}) {
-  const headers = { 'Content-Type': 'application/json' }
-  const token = getToken()
-  if (auth && token) headers.Authorization = `Bearer ${token}`
+export async function apiRequest(path, { method = 'GET', body, auth = false } = {}) {
+  const headers = { Accept: 'application/json' }
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  if (auth) headers.Authorization = `Bearer ${getToken()}`
 
-  const res = await fetch(`${BASE}/api${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-
-  let json = null
+  let res
   try {
-    json = await res.json()
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
   } catch {
-    json = null
+    throw new ApiError('Tidak dapat terhubung ke server', 0)
   }
-  if (!res.ok) {
-    const err = new Error(json?.message || `Permintaan gagal (${res.status})`)
-    err.status = res.status
-    throw err
+
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok || json.status !== 'success') {
+    throw new ApiError(json.message || 'Terjadi kesalahan pada server', res.status)
   }
   return json
 }
+
+export const apiData = async (path, options) => (await apiRequest(path, options)).data
+
+export const apiList = async (path, options) => (await apiRequest(path, options)).data || []

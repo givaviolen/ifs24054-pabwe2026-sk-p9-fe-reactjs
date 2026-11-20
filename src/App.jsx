@@ -1,82 +1,96 @@
 import { useCallback, useEffect, useState } from 'react'
+import Link from './components/Link'
 import useTheme from './hooks/useTheme'
-import StickyNavbar from './features/blog/components/StickyNavbar'
-import PublicArticleList from './features/blog/components/PublicArticleList'
-import PublicArticleDetail from './features/blog/components/PublicArticleDetail'
-import AuthorDashboard from './features/blog/components/AuthorDashboard'
+import usePageMeta from './hooks/usePageMeta'
+import { getRedirect, homeFor, matchRoute, navigate } from './helpers/router'
+import { clearSession, getToken, getUser, saveSession } from './helpers/sessionHelper'
 import AdminDashboard from './features/admin/components/AdminDashboard'
+import { logout } from './features/auth/api/authApi'
 import AuthPage from './features/auth/components/AuthPage'
-import { getProfile, logout } from './features/auth/api/authApi'
-import { getToken, setToken } from './helpers/apiHelper'
+import AuthorDashboard from './features/blog/components/AuthorDashboard'
+import PublicArticleDetail from './features/blog/components/PublicArticleDetail'
+import PublicArticleList from './features/blog/components/PublicArticleList'
+import StickyNavbar from './features/blog/components/StickyNavbar'
+
+function NotFound() {
+  usePageMeta('Halaman tidak ditemukan | Delcom Blog', 'Halaman yang Anda cari tidak ditemukan di Delcom Blog.')
+  return (
+    <div className="mx-auto w-full max-w-3xl px-4 py-16 text-center">
+      <h1 className="m-0 text-3xl font-bold text-slate-900 dark:text-white">Halaman tidak ditemukan</h1>
+      <p className="mt-3 text-slate-700 dark:text-slate-300">Alamat yang Anda tuju tidak tersedia.</p>
+      <Link to="/" className="font-medium text-indigo-700 underline dark:text-indigo-300">
+        Kembali ke beranda
+      </Link>
+    </div>
+  )
+}
 
 export default function App() {
   const { theme, toggleTheme } = useTheme()
   const [path, setPath] = useState(window.location.pathname)
-  const [user, setUser] = useState(null)
-  const [ready, setReady] = useState(!getToken())
+  const [user, setUser] = useState(() => (getToken() ? getUser() : null))
 
-  const navigate = useCallback((to, replace = false) => {
-    if (replace) window.history.replaceState({}, '', to)
-    else window.history.pushState({}, '', to)
-    setPath(to)
-    window.scrollTo(0, 0)
-  }, [])
-
-  // Sinkronisasi tombol back/forward peramban
   useEffect(() => {
     const onPop = () => setPath(window.location.pathname)
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
-  // Pulihkan sesi saat refresh
+  const route = matchRoute(path)
+  const redirect = getRedirect(route.name, user)
+
   useEffect(() => {
-    if (!getToken()) return
-    getProfile()
-      .then(setUser)
-      .catch(() => setToken(null))
-      .finally(() => setReady(true))
-  }, [])
+    if (redirect) navigate(redirect, { replace: true })
+  }, [redirect])
 
-  const homeFor = (u) => (u.role === 'admin' ? '/admin' : '/author')
-
-  const onAuth = (u) => {
-    setUser(u)
-    navigate(homeFor(u), true)
+  const handleAuthSuccess = ({ token, user: account }) => {
+    saveSession(token, account)
+    setUser(account)
+    navigate(homeFor(account))
   }
 
-  const onLogout = async () => {
-    try { await logout() } catch { /* token mungkin sudah kedaluwarsa */ }
-    setToken(null)
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } catch {
+      // sesi lokal tetap dihapus walau server tidak dapat dihubungi
+    }
+    clearSession()
     setUser(null)
     navigate('/')
   }
 
-  // Penjaga rute
-  const isAuthPath = path === '/login' || path === '/register'
-  let redirect = null
-  if (ready) {
-    if (path === '/author' && (!user || user.role === 'admin')) redirect = user ? '/admin' : '/login'
-    else if (path === '/admin' && (!user || user.role !== 'admin')) redirect = user ? '/author' : '/login'
-    else if (isAuthPath && user) redirect = homeFor(user)
-  }
-  useEffect(() => {
-    if (redirect) navigate(redirect, true)
-  }, [redirect, navigate])
+  const handleSessionExpired = useCallback(() => {
+    clearSession()
+    setUser(null)
+    navigate('/login', { replace: true })
+  }, [])
 
-  let view
-  if (!ready || redirect) view = <main className="p-8">Memuat...</main>
-  else if (path === '/login') view = <AuthPage mode="login" onAuth={onAuth} navigate={navigate} />
-  else if (path === '/register') view = <AuthPage mode="register" onAuth={onAuth} navigate={navigate} />
-  else if (path === '/author') view = <AuthorDashboard navigate={navigate} />
-  else if (path === '/admin') view = <AdminDashboard />
-  else if (path.startsWith('/posts/')) view = <PublicArticleDetail slug={path.slice('/posts/'.length)} navigate={navigate} />
-  else view = <PublicArticleList navigate={navigate} />
+  let page = null
+  if (!redirect) {
+    if (route.name === 'home') page = <PublicArticleList />
+    else if (route.name === 'post') page = <PublicArticleDetail slug={route.slug} />
+    else if (route.name === 'login' || route.name === 'register') page = <AuthPage mode={route.name} onSuccess={handleAuthSuccess} />
+    else if (route.name === 'author') page = <AuthorDashboard theme={theme} onSessionExpired={handleSessionExpired} />
+    else if (route.name === 'admin') page = <AdminDashboard onSessionExpired={handleSessionExpired} />
+    else page = <NotFound />
+  }
 
   return (
-    <div className="min-h-screen">
-      <StickyNavbar user={user} navigate={navigate} onLogout={onLogout} theme={theme} toggleTheme={toggleTheme} />
-      {view}
+    <div className="flex min-h-screen flex-col">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-white focus:px-3 focus:py-2 focus:text-slate-900"
+      >
+        Lewati ke konten utama
+      </a>
+      <StickyNavbar user={user} theme={theme} onToggleTheme={toggleTheme} onLogout={handleLogout} />
+      <main id="main-content" className="flex-1">
+        {page}
+      </main>
+      <footer className="border-t border-slate-200 py-6 text-center text-sm text-slate-700 dark:border-slate-700 dark:text-slate-300">
+        © 2026 Delcom Blog
+      </footer>
     </div>
   )
 }

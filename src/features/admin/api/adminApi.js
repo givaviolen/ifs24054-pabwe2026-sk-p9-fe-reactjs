@@ -1,5 +1,7 @@
-import { apiRequest } from '../../../helpers/apiHelper'
+import { apiList } from '../../../helpers/apiHelper'
 
-export const getUsers = () => apiRequest('/admin/users').then((r) => r.data)
-export const getAllPosts = () => apiRequest('/admin/posts').then((r) => r.data)
-export const getUserPosts = (id) => apiRequest(`/admin/users/${id}/posts`).then((r) => r.data)
+export const fetchUsers = () => apiList('/api/admin/users', { auth: true })
+
+export const fetchAllPosts = () => apiList('/api/admin/posts', { auth: true })
+
+export const fetchUserPosts = (id) => apiList(`/api/admin/users/${id}/posts`, { auth: true })

@@ -1,71 +1,122 @@
 import { useState } from 'react'
+import Link from '../../../components/Link'
 import useInput from '../../../hooks/useInput'
+import usePageMeta from '../../../hooks/usePageMeta'
+import { navigate } from '../../../helpers/router'
+import { showSuccess } from '../../../helpers/toolsHelper'
 import { login, register } from '../api/authApi'
-import { setToken } from '../../../helpers/apiHelper'
-import { showError } from '../../../helpers/toolsHelper'
 
-const field = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'
+const inputClass =
+  'w-full rounded-lg border border-slate-400 bg-white px-3 py-2 text-slate-900 dark:border-slate-500 dark:bg-slate-800 dark:text-white'
+const labelClass = 'mb-1 block text-sm font-medium text-slate-800 dark:text-slate-200'
 
-export default function AuthPage({ mode = 'login', onAuth, navigate }) {
+export default function AuthPage({ mode, onSuccess }) {
   const isLogin = mode === 'login'
-  const [username, onUsername] = useInput('')
-  const [email, onEmail] = useInput('')
-  const [password, onPassword] = useInput('')
+  usePageMeta(
+    isLogin ? 'Masuk | Delcom Blog' : 'Daftar | Delcom Blog',
+    isLogin ? 'Masuk ke akun Delcom Blog Anda untuk mengelola artikel.' : 'Daftar akun penulis baru di Delcom Blog.',
+  )
+  const prefix = isLogin ? 'login' : 'register'
+  const [username, onUsername] = useInput()
+  const [email, onEmail] = useInput()
+  const [password, onPassword] = useInput()
+  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const submit = async (e) => {
-    e.preventDefault()
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    if (!username.trim() || !password || (!isLogin && !email.trim())) {
+      setError(isLogin ? 'Username dan password wajib diisi' : 'Username, email, dan password wajib diisi')
+      return
+    }
+    setError('')
     setLoading(true)
     try {
-      const res = isLogin ? await login(username, password) : await register(username, email, password)
-      setToken(res.token)
-      onAuth(res.user)
+      if (isLogin) {
+        onSuccess(await login({ username: username.trim(), password }))
+      } else {
+        await register({ username: username.trim(), email: email.trim(), password })
+        showSuccess('Registrasi berhasil, silakan masuk')
+        navigate('/login')
+      }
     } catch (err) {
-      showError(err.message)
-    } finally {
+      setError(err.message)
       setLoading(false)
     }
   }
 
   return (
-    <main className="mx-auto flex min-h-[80vh] max-w-md items-center px-4">
-      <form onSubmit={submit} className="w-full space-y-4 rounded-2xl bg-white p-8 shadow-lg dark:bg-slate-800">
-        <h1 className="text-2xl font-bold">{isLogin ? 'Masuk ke Delcom Blog' : 'Daftar Akun Penulis'}</h1>
-
-        <div>
-          <label htmlFor={isLogin ? 'login-username' : 'register-username'} className="mb-1 block text-sm font-medium">Username</label>
-          <input id={isLogin ? 'login-username' : 'register-username'} className={field} value={username} onChange={onUsername} required />
-        </div>
-
-        {!isLogin && (
+    <div className="mx-auto w-full max-w-md px-4 py-12">
+      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <h1 className="m-0 text-2xl font-bold text-slate-900 dark:text-white">
+          {isLogin ? 'Masuk ke Delcom Blog' : 'Daftar Akun Penulis'}
+        </h1>
+        <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
           <div>
-            <label htmlFor="register-email" className="mb-1 block text-sm font-medium">Email</label>
-            <input id="register-email" type="email" className={field} value={email} onChange={onEmail} required />
+            <label htmlFor={`${prefix}-username`} className={labelClass}>
+              Username
+            </label>
+            <input
+              id={`${prefix}-username`}
+              name="username"
+              type="text"
+              autoComplete="username"
+              value={username}
+              onChange={onUsername}
+              className={inputClass}
+            />
           </div>
-        )}
-
-        <div>
-          <label htmlFor={isLogin ? 'login-password' : 'register-password'} className="mb-1 block text-sm font-medium">Password</label>
-          <input id={isLogin ? 'login-password' : 'register-password'} type="password" className={field} value={password} onChange={onPassword} required />
-        </div>
-
-        <button
-          id={isLogin ? 'login-submit' : 'register-submit'}
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-indigo-600 py-2 font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
-        >
-          {loading ? 'Memproses...' : isLogin ? 'Masuk' : 'Daftar'}
-        </button>
-
-        <p className="text-center text-sm">
-          {isLogin ? 'Belum punya akun?' : 'Sudah punya akun?'}{' '}
-          <a href={isLogin ? '/register' : '/login'} className="font-semibold text-indigo-600"
-            onClick={(e) => { e.preventDefault(); navigate(isLogin ? '/register' : '/login') }}>
-            {isLogin ? 'Daftar' : 'Masuk'}
-          </a>
+          {!isLogin && (
+            <div>
+              <label htmlFor="register-email" className={labelClass}>
+                Email
+              </label>
+              <input
+                id="register-email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={onEmail}
+                className={inputClass}
+              />
+            </div>
+          )}
+          <div>
+            <label htmlFor={`${prefix}-password`} className={labelClass}>
+              Password
+            </label>
+            <input
+              id={`${prefix}-password`}
+              name="password"
+              type="password"
+              autoComplete={isLogin ? 'current-password' : 'new-password'}
+              value={password}
+              onChange={onPassword}
+              className={inputClass}
+            />
+          </div>
+          {error && (
+            <p role="alert" className="m-0 rounded-lg bg-red-100 p-3 text-sm text-red-900">
+              {error}
+            </p>
+          )}
+          <button
+            id={`${prefix}-submit`}
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-lg bg-indigo-700 px-4 py-2 font-semibold text-white hover:bg-indigo-800 disabled:opacity-60"
+          >
+            {isLogin ? 'Masuk' : 'Daftar'}
+          </button>
+        </form>
+        <p className="mb-0 mt-6 text-sm text-slate-700 dark:text-slate-300">
+          {isLogin ? 'Belum punya akun? ' : 'Sudah punya akun? '}
+          <Link to={isLogin ? '/register' : '/login'} className="font-medium text-indigo-700 underline dark:text-indigo-300">
+            {isLogin ? 'Daftar sekarang' : 'Masuk di sini'}
+          </Link>
         </p>
-      </form>
-    </main>
+      </div>
+    </div>
   )
 }

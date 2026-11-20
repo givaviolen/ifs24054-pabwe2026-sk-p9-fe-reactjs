@@ -1,30 +1,85 @@
-import { useEffect, useState } from 'react'
-import { getPublicPost } from '../api/blogApi'
-import MarkdownViewer from '../../../components/MarkdownViewer'
+import { lazy, Suspense, useEffect, useState } from 'react'
+import Link from '../../../components/Link'
+import usePageMeta from '../../../hooks/usePageMeta'
 import { formatDate } from '../../../helpers/toolsHelper'
+import { fetchPublicPost } from '../api/blogApi'
 
-export default function PublicArticleDetail({ slug, navigate }) {
+const MarkdownViewer = lazy(() => import('../../../components/MarkdownViewer'))
+
+const DEFAULT_DESC = 'Baca artikel lengkap di Delcom Blog.'
+
+export default function PublicArticleDetail({ slug }) {
   const [post, setPost] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  usePageMeta(post ? `${post.title} | Delcom Blog` : 'Artikel | Delcom Blog', post && post.excerpt ? post.excerpt : DEFAULT_DESC)
+
   useEffect(() => {
-    setPost(null)
-    getPublicPost(slug).then(setPost).catch((e) => setError(e.message))
+    let active = true
+    async function run() {
+      setLoading(true)
+      let result = null
+      let message = ''
+      try {
+        result = await fetchPublicPost(slug)
+      } catch (err) {
+        message = err.message
+      }
+      if (!active) return
+      setPost(result)
+      setError(message)
+      setLoading(false)
+    }
+    run()
+    return () => {
+      active = false
+    }
   }, [slug])
 
-  if (error) return <main className="p-8"><p className="text-rose-600">{error}</p></main>
-  if (!post) return <main className="p-8">Memuat artikel...</main>
-
   return (
-    <main className="w-full px-4 py-8 md:px-10">
-      <a href="/" onClick={(e) => { e.preventDefault(); navigate('/') }} className="text-sm font-semibold text-indigo-600">← Kembali</a>
-      <span className="mt-4 block text-xs font-semibold uppercase text-indigo-600">{post.category}</span>
-      <h1 className="mt-1 text-4xl font-extrabold">{post.title}</h1>
-      <p className="mt-2 text-sm text-slate-500">
-        Oleh {post.author_name} · {formatDate(post.published_at)} · {post.reading_time} menit baca
-      </p>
-      {post.cover_image_path && <img src={post.cover_image_path} alt={post.title} className="mt-6 max-h-[28rem] w-full rounded-2xl object-cover" />}
-      <div className="mt-6"><MarkdownViewer content={post.content} /></div>
-    </main>
+    <article className="w-full px-4 py-8 sm:px-8 lg:px-12">
+      <Link to="/" className="text-sm font-medium text-indigo-700 hover:underline dark:text-indigo-300">
+        ← Kembali ke beranda
+      </Link>
+      {loading && (
+        <p role="status" className="mt-6 min-h-[24rem]">
+          Memuat artikel…
+        </p>
+      )}
+      {!loading && error && (
+        <div role="alert" className="mt-6 rounded-lg bg-red-100 p-4 text-red-900">
+          <h1 className="m-0 text-xl font-bold">Artikel tidak dapat dimuat</h1>
+          <p className="mb-0 mt-2">{error}</p>
+        </div>
+      )}
+      {!loading && post && (
+        <>
+          <header className="mt-6">
+            <span className="rounded-full bg-indigo-100 px-3 py-0.5 text-xs font-semibold text-indigo-900">
+              {post.category}
+            </span>
+            <h1 className="mb-2 mt-3 text-3xl font-bold text-slate-900 dark:text-white sm:text-4xl">{post.title}</h1>
+            <p className="m-0 text-sm text-slate-600 dark:text-slate-300">
+              {post.author_name} · {formatDate(post.published_at)} · {post.reading_time} menit baca
+            </p>
+          </header>
+          {post.cover_image_path && (
+            <img
+              src={post.cover_image_path}
+              alt={`Sampul artikel ${post.title}`}
+              width="1200"
+              height="400"
+              className="my-6 h-56 w-full rounded-xl object-cover sm:h-96"
+            />
+          )}
+          <div className="mt-6">
+            <Suspense fallback={<p role="status">Memuat konten…</p>}>
+              <MarkdownViewer content={post.content} />
+            </Suspense>
+          </div>
+        </>
+      )}
+    </article>
   )
 }
